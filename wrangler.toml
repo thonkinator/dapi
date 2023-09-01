@@ -1,0 +1,3 @@
+name = "dapi"
+compatibility_date = "2023-08-14"
+main = "src/index.ts"
