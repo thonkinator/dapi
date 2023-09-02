@@ -14,6 +14,7 @@ app.use("*", async (c, next) => {
 		console.log(cached);
 		const res = new Response(cached.body);
 		res.headers.set("X-Cache-Status", "HIT");
+		res.headers.set("X-Response-Time", `${performance.now() - start}`);
 		return res;
 	}
 	await next();
