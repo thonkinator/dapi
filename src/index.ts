@@ -1,11 +1,21 @@
 import { Hono, type Context } from "hono";
-import type { APIUser, APIGuild } from "discord-api-types/v10";
+import type { APIUser } from "discord-api-types/v10";
 
 type Bindings = {
 	TOKEN: string;
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
+app.use("*", async (c, next) => {
+	const start = performance.now();
+	await next();
+	c.res.headers.set("X-Response-Time", `${performance.now() - start}`);
+	if (new URL(c.req.url).searchParams.has("reload")) {
+		c.res.headers.set("Cache-Control", "no-store");
+	} else {
+		c.res.headers.set("Cache-Control", "public, max-age=3600");
+	}
+});
 
 async function api(c: Context<{ Bindings: Bindings }>, endpoint: string) {
 	return (
@@ -17,10 +27,11 @@ async function api(c: Context<{ Bindings: Bindings }>, endpoint: string) {
 	).json();
 }
 
-function cdn(c: Context<{ Bindings: Bindings }>, endpoint: string) {
+async function cdn(c: Context<{ Bindings: Bindings }>, endpoint: string) {
 	const url = new URL(`https://cdn.discordapp.com${endpoint}`);
 	new URL(c.req.url).searchParams.forEach((value, param) => url.searchParams.append(param, value));
-	return fetch(url);
+	const res = await fetch(url);
+	return new Response(res.body, res);
 }
 
 app.get(
@@ -31,13 +42,13 @@ app.get(
 		const user = (await api(c, `/users/${id}`)) as APIUser;
 		const assetHash = user[asset.replaceAll("-", "_") as "avatar" | "banner" | "avatar_decoration"];
 		return user.avatar == null && asset == "avatar"
-			? cdn(
+			? await cdn(
 					c,
 					`/embed/avatars/${
 						user.discriminator == "0" ? (BigInt(id) >> 22n) % 6n : parseInt(user.discriminator) % 5
 					}.png`
 			  )
-			: cdn(c, `/${asset}s/${id}/${assetHash}.${assetHash?.startsWith("a_") ? "gif" : format}`);
+			: await cdn(c, `/${asset}s/${id}/${assetHash}.${assetHash?.startsWith("a_") ? "gif" : format}`);
 	}
 );
 
