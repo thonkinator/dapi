@@ -56,6 +56,7 @@ app.get(
 		const { id, asset: assetRaw } = c.req.param();
 		const [asset, format = "webp"] = assetRaw.split(".");
 		const user = (await api(c, `/users/${id}`)) as APIUser;
+		console.log(JSON.stringify(user, null, 4));
 		const assetHash = user[asset.replaceAll("-", "_") as "avatar" | "banner" | "avatar_decoration"];
 		const url = new URL(c.req.url);
 		return user.avatar == null && asset == "avatar"
