@@ -8,18 +8,21 @@ type Bindings = {
 const app = new Hono<{ Bindings: Bindings }>();
 app.use("*", async (c, next) => {
 	const start = performance.now();
+	await next();
+	c.res.headers.set("X-Response-Time", `${performance.now() - start}`);
+	c.res.headers.set("Access-Control-Allow-Origin", "*");
+});
+app.use("*", async (c, next) => {
 	const cached = await caches.default.match(c.req.url);
 	const bypass = c.req.headers.get("Cache-Control")?.includes("no-cache");
 	if (cached && !bypass) {
 		console.log(cached);
 		const res = new Response(cached.body);
 		res.headers.set("X-Cache-Status", "HIT");
-		res.headers.set("X-Response-Time", `${performance.now() - start}`);
 		res.headers.set("Content-Type", cached.headers.get("Content-Type")!);
 		return res;
 	}
 	await next();
-	c.res.headers.set("X-Response-Time", `${performance.now() - start}`);
 	if (!c.res.ok) return;
 	c.res.headers.set("X-Cache-Status", bypass ? "BYPASS" : "MISS");
 	c.executionCtx.waitUntil(caches.default.put(c.req.url, c.res.clone()));
