@@ -1,5 +1,5 @@
 import { Hono, type Context } from "hono";
-import type { APIUser } from "discord-api-types/v10";
+import type { APIUser, RESTRateLimit } from "discord-api-types/v10";
 
 type Bindings = {
 	TOKEN: string;
@@ -28,13 +28,17 @@ app.use("*", async (c, next) => {
 });
 
 async function api(c: Context<{ Bindings: Bindings }>, endpoint: string) {
-	return (
+	const res: RESTRateLimit = await (
 		await fetch(`https://discord.com/api/v10${endpoint}`, {
 			headers: {
 				Authorization: `Bot ${c.env.TOKEN}`,
 			},
 		})
 	).json();
+	if (!res.retry_after) return res;
+	return new Promise((resolve, reject) => {
+		setTimeout(() => resolve(api(c, endpoint)), res.retry_after * 1000);
+	});
 }
 
 async function cdn(c: Context<{ Bindings: Bindings }>, endpoint: string) {
