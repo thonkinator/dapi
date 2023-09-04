@@ -14,8 +14,7 @@ app.use("*", async (c, next) => {
 });
 app.use("*", async (c, next) => {
 	const cached = await caches.default.match(c.req.url);
-	const bypass = c.req.headers.get("Cache-Control")?.includes("no-cache");
-	if (cached && !bypass) {
+	if (cached) {
 		console.log(cached);
 		const res = new Response(cached.body);
 		res.headers.set("X-Cache-Status", "HIT");
@@ -24,7 +23,7 @@ app.use("*", async (c, next) => {
 	}
 	await next();
 	if (!c.res.ok) return;
-	c.res.headers.set("X-Cache-Status", bypass ? "BYPASS" : "MISS");
+	c.res.headers.set("X-Cache-Status", "MISS");
 	c.executionCtx.waitUntil(caches.default.put(c.req.url, c.res.clone()));
 });
 
@@ -42,7 +41,6 @@ async function cdn(c: Context<{ Bindings: Bindings }>, endpoint: string) {
 	const url = new URL(`https://cdn.discordapp.com${endpoint}`);
 	new URL(c.req.url).searchParams.forEach((value, param) => url.searchParams.append(param, value));
 	const res = await fetch(url);
-	console.log(`${c.req.url}: ${url.href}`);
 	return new Response(res.body, {
 		headers: {
 			"Content-Type": res.headers.get("Content-Type")!,
@@ -56,7 +54,6 @@ app.get(
 		const { id, asset: assetRaw } = c.req.param();
 		const [asset, format = "webp"] = assetRaw.split(".");
 		const user = (await api(c, `/users/${id}`)) as APIUser;
-		console.log(JSON.stringify(user, null, 4));
 		const assetHash = user[asset.replaceAll("-", "_") as "avatar" | "banner" | "avatar_decoration"];
 		const url = new URL(c.req.url);
 		return user.avatar == null && asset == "avatar"
