@@ -42,7 +42,7 @@ async function cdn(c: Context<{ Bindings: Bindings }>, endpoint: string) {
 	const url = new URL(`https://cdn.discordapp.com${endpoint}`);
 	new URL(c.req.url).searchParams.forEach((value, param) => url.searchParams.append(param, value));
 	const res = await fetch(url);
-	console.log(`${c.req.url}: ${url}`);
+	console.log(`${c.req.url}: ${url.href}`);
 	return new Response(res.body, {
 		headers: {
 			"Content-Type": res.headers.get("Content-Type")!,
