@@ -52,6 +52,7 @@ app.get(
 		const [asset, format = "webp"] = assetRaw.split(".");
 		const user = (await api(c, `/users/${id}`)) as APIUser;
 		const assetHash = user[asset.replaceAll("-", "_") as "avatar" | "banner" | "avatar_decoration"];
+		const url = new URL(c.req.url);
 		return user.avatar == null && asset == "avatar"
 			? await cdn(
 					c,
@@ -59,7 +60,12 @@ app.get(
 						user.discriminator == "0" ? (BigInt(id) >> 22n) % 6n : parseInt(user.discriminator) % 5
 					}.png`
 			  )
-			: await cdn(c, `/${asset}s/${id}/${assetHash}.${assetHash?.startsWith("a_") ? "gif" : format}`);
+			: await cdn(
+					c,
+					`/${asset}s/${id}/${assetHash}.${
+						assetHash?.startsWith("a_") && !url.searchParams.has("noanim") ? "gif" : format
+					}`
+			  );
 	}
 );
 
