@@ -1,33 +1,38 @@
 import { Hono, type Context } from "hono";
 import type { APIUser, RESTRateLimit } from "discord-api-types/v10";
 
-type Bindings = {
-	TOKEN: string;
+type Types = {
+	Bindings: {
+		TOKEN: string;
+	};
+	Variables: {
+		retries: number;
+	};
 };
 
-const app = new Hono<{ Bindings: Bindings }>();
+const app = new Hono<Types>();
 app.use("*", async (c, next) => {
 	const start = performance.now();
 	await next();
-	c.res.headers.set("X-Response-Time", `${performance.now() - start}`);
-	c.res.headers.set("Access-Control-Allow-Origin", "*");
+	c.header("X-Response-Time", `${performance.now() - start}`);
+	c.header("Access-Control-Allow-Origin", "*");
 });
 app.use("*", async (c, next) => {
 	const cached = await caches.default.match(c.req.url);
-	if (cached) {
+	if (cached && !cached.headers.get("Content-Type")?.startsWith("application/xml")) {
 		console.log(cached);
-		const res = new Response(cached.body);
+		const res = new Response(cached.body, cached);
 		res.headers.set("X-Cache-Status", "HIT");
-		res.headers.set("Content-Type", cached.headers.get("Content-Type")!);
 		return res;
 	}
 	await next();
 	if (!c.res.ok) return;
-	c.res.headers.set("X-Cache-Status", "MISS");
+	c.header("X-Retries", `${c.get("retries")}`);
+	c.header("X-Cache-Status", "MISS");
 	c.executionCtx.waitUntil(caches.default.put(c.req.url, c.res.clone()));
 });
 
-async function api(c: Context<{ Bindings: Bindings }>, endpoint: string) {
+async function api(c: Context<Types>, endpoint: string, retries = 0) {
 	const res: RESTRateLimit = await (
 		await fetch(`https://discord.com/api/v10${endpoint}`, {
 			headers: {
@@ -35,13 +40,14 @@ async function api(c: Context<{ Bindings: Bindings }>, endpoint: string) {
 			},
 		})
 	).json();
+	c.set("retries", retries);
 	if (!res.retry_after) return res;
 	return new Promise((resolve, reject) => {
-		setTimeout(() => resolve(api(c, endpoint)), res.retry_after * 1000);
+		setTimeout(() => resolve(api(c, endpoint, retries + 1)), res.retry_after * 1000);
 	});
 }
 
-async function cdn(c: Context<{ Bindings: Bindings }>, endpoint: string) {
+async function cdn(c: Context<Types>, endpoint: string) {
 	const url = new URL(`https://cdn.discordapp.com${endpoint}`);
 	new URL(c.req.url).searchParams.forEach((value, param) => url.searchParams.append(param, value));
 	const res = await fetch(url);
